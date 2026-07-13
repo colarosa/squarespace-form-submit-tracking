@@ -1,0 +1,196 @@
+<script>
+(function () {
+  'use strict';
+
+  window.dataLayer = window.dataLayer || [];
+
+  if (window.__squarespaceReactFormTrackerInstalled) {
+    return;
+  }
+
+  window.__squarespaceReactFormTrackerInstalled = true;
+
+  function clean(value) {
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
+  function getFormData(form) {
+    var firstNameField = form.querySelector(
+      '.field.first-name input[name="fname"]'
+    );
+
+    var lastNameField = form.querySelector(
+      '.field.last-name input[name="lname"]'
+    );
+
+    var emailField = form.querySelector(
+      '.form-item.email input[type="email"]'
+    );
+
+    var subjectField = form.querySelector(
+      '.form-item.text input[type="text"]:not(#message-field):not([tabindex="-1"])'
+    );
+
+    var enquiryField = form.querySelector(
+      '.form-item.textarea textarea'
+    );
+
+    var firstName = firstNameField
+      ? clean(firstNameField.value)
+      : '';
+
+    var lastName = lastNameField
+      ? clean(lastNameField.value)
+      : '';
+
+    return {
+      contact_first_name: firstName,
+      contact_last_name: lastName,
+      contact_full_name: clean(firstName + ' ' + lastName),
+
+      contact_email: emailField
+        ? clean(emailField.value).toLowerCase()
+        : '',
+
+      contact_enquiry_subject: subjectField
+        ? clean(subjectField.value)
+        : '',
+
+      contact_enquiry_message: enquiryField
+        ? clean(enquiryField.value)
+        : ''
+    };
+  }
+
+  function isTargetForm(form) {
+    return Boolean(
+      form &&
+      form.matches('form.react-form-contents') &&
+      form.querySelector('.field.first-name input[name="fname"]') &&
+      form.querySelector('.field.last-name input[name="lname"]') &&
+      form.querySelector('.form-item.email input[type="email"]') &&
+      form.querySelector('.form-item.textarea textarea')
+    );
+  }
+
+  function pushSubmission(form) {
+    var data = getFormData(form);
+
+    /*
+     * Prevent an empty or incomplete form from firing.
+     */
+    if (
+      !data.contact_first_name ||
+      !data.contact_last_name ||
+      !data.contact_email ||
+      !data.contact_enquiry_subject ||
+      !data.contact_enquiry_message
+    ) {
+      console.log(
+        'Squarespace GTM: form values incomplete, dataLayer push blocked.',
+        data
+      );
+
+      return;
+    }
+
+    /*
+     * Basic email validation.
+     */
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.contact_email)) {
+      console.log(
+        'Squarespace GTM: invalid email, dataLayer push blocked.'
+      );
+
+      return;
+    }
+
+    /*
+     * Prevent duplicate firing from both click and submit events.
+     */
+    var now = Date.now();
+
+    if (
+      form.__lastGtmSubmission &&
+      now - form.__lastGtmSubmission < 2000
+    ) {
+      return;
+    }
+
+    form.__lastGtmSubmission = now;
+
+    window.dataLayer.push({
+      event: 'squarespace_form_submit',
+
+      form_name: 'contact_form',
+      form_type: 'squarespace_react_form',
+
+      contact_first_name: data.contact_first_name,
+      contact_last_name: data.contact_last_name,
+      contact_full_name: data.contact_full_name,
+      contact_email: data.contact_email,
+      contact_enquiry_subject: data.contact_enquiry_subject,
+      contact_enquiry_message: data.contact_enquiry_message
+    });
+
+    console.log(
+      'Squarespace GTM: submission pushed to dataLayer.',
+      data
+    );
+  }
+
+  /*
+   * Capture the native submit event.
+   */
+  document.addEventListener(
+    'submit',
+    function (event) {
+      var form = event.target;
+
+      if (!isTargetForm(form)) {
+        return;
+      }
+
+      /*
+       * Delay by one JavaScript cycle so React has finished
+       * updating the input values.
+       */
+      setTimeout(function () {
+        pushSubmission(form);
+      }, 0);
+    },
+    true
+  );
+
+  /*
+   * Squarespace React forms may occasionally intercept the button
+   * click before a conventional submit event reaches GTM.
+   * This fallback captures the submit-button click.
+   */
+  document.addEventListener(
+    'click',
+    function (event) {
+      var submitButton = event.target.closest(
+        'form.react-form-contents button[type="submit"]'
+      );
+
+      if (!submitButton) {
+        return;
+      }
+
+      var form = submitButton.closest(
+        'form.react-form-contents'
+      );
+
+      if (!isTargetForm(form)) {
+        return;
+      }
+
+      setTimeout(function () {
+        pushSubmission(form);
+      }, 0);
+    },
+    true
+  );
+})();
+</script>
