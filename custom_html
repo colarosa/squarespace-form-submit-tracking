@@ -4,36 +4,32 @@
 
   window.dataLayer = window.dataLayer || [];
 
-  if (window.__squarespaceReactFormTrackerInstalled) {
+  if (window.__squarespaceContactTrackerInstalled) {
     return;
   }
 
-  window.__squarespaceReactFormTrackerInstalled = true;
+  window.__squarespaceContactTrackerInstalled = true;
 
   function clean(value) {
     return typeof value === 'string' ? value.trim() : '';
   }
 
+  function isTargetForm(form) {
+    return Boolean(
+      form &&
+      form.matches('form.react-form-contents') &&
+      form.querySelector('input[name="fname"]') &&
+      form.querySelector('input[name="lname"]') &&
+      form.querySelector('input[type="email"]') &&
+      form.querySelector('.form-item.textarea textarea')
+    );
+  }
+
   function getFormData(form) {
-    var firstNameField = form.querySelector(
-      '.field.first-name input[name="fname"]'
-    );
-
-    var lastNameField = form.querySelector(
-      '.field.last-name input[name="lname"]'
-    );
-
-    var emailField = form.querySelector(
-      '.form-item.email input[type="email"]'
-    );
-
-    var subjectField = form.querySelector(
-      '.form-item.text input[type="text"]:not(#message-field):not([tabindex="-1"])'
-    );
-
-    var enquiryField = form.querySelector(
-      '.form-item.textarea textarea'
-    );
+    var firstNameField = form.querySelector('input[name="fname"]');
+    var lastNameField = form.querySelector('input[name="lname"]');
+    var emailField = form.querySelector('input[type="email"]');
+    var messageField = form.querySelector('.form-item.textarea textarea');
 
     var firstName = firstNameField
       ? clean(firstNameField.value)
@@ -47,72 +43,43 @@
       contact_first_name: firstName,
       contact_last_name: lastName,
       contact_full_name: clean(firstName + ' ' + lastName),
-
       contact_email: emailField
         ? clean(emailField.value).toLowerCase()
         : '',
-
-      contact_enquiry_subject: subjectField
-        ? clean(subjectField.value)
-        : '',
-
-      contact_enquiry_message: enquiryField
-        ? clean(enquiryField.value)
+      contact_enquiry_message: messageField
+        ? clean(messageField.value)
         : ''
     };
-  }
-
-  function isTargetForm(form) {
-    return Boolean(
-      form &&
-      form.matches('form.react-form-contents') &&
-      form.querySelector('.field.first-name input[name="fname"]') &&
-      form.querySelector('.field.last-name input[name="lname"]') &&
-      form.querySelector('.form-item.email input[type="email"]') &&
-      form.querySelector('.form-item.textarea textarea')
-    );
   }
 
   function pushSubmission(form) {
     var data = getFormData(form);
 
-    /*
-     * Prevent an empty or incomplete form from firing.
-     */
     if (
       !data.contact_first_name ||
       !data.contact_last_name ||
       !data.contact_email ||
-      !data.contact_enquiry_subject ||
       !data.contact_enquiry_message
     ) {
       console.log(
-        'Squarespace GTM: form values incomplete, dataLayer push blocked.',
+        'Squarespace GTM: required values missing.',
         data
       );
-
       return;
     }
 
-    /*
-     * Basic email validation.
-     */
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.contact_email)) {
       console.log(
-        'Squarespace GTM: invalid email, dataLayer push blocked.'
+        'Squarespace GTM: invalid email address.'
       );
-
       return;
     }
 
-    /*
-     * Prevent duplicate firing from both click and submit events.
-     */
     var now = Date.now();
 
     if (
       form.__lastGtmSubmission &&
-      now - form.__lastGtmSubmission < 2000
+      now - form.__lastGtmSubmission < 3000
     ) {
       return;
     }
@@ -129,18 +96,17 @@
       contact_last_name: data.contact_last_name,
       contact_full_name: data.contact_full_name,
       contact_email: data.contact_email,
-      contact_enquiry_subject: data.contact_enquiry_subject,
       contact_enquiry_message: data.contact_enquiry_message
     });
 
     console.log(
-      'Squarespace GTM: submission pushed to dataLayer.',
+      'Squarespace GTM: contact form pushed.',
       data
     );
   }
 
   /*
-   * Capture the native submit event.
+   * Primary listener
    */
   document.addEventListener(
     'submit',
@@ -151,46 +117,51 @@
         return;
       }
 
-      /*
-       * Delay by one JavaScript cycle so React has finished
-       * updating the input values.
-       */
-      setTimeout(function () {
-        pushSubmission(form);
-      }, 0);
+      pushSubmission(form);
     },
     true
   );
 
   /*
-   * Squarespace React forms may occasionally intercept the button
-   * click before a conventional submit event reaches GTM.
-   * This fallback captures the submit-button click.
+   * Squarespace/React fallback
    */
   document.addEventListener(
     'click',
     function (event) {
-      var submitButton = event.target.closest(
+      var button = event.target.closest(
         'form.react-form-contents button[type="submit"]'
       );
 
-      if (!submitButton) {
+      if (!button) {
         return;
       }
 
-      var form = submitButton.closest(
-        'form.react-form-contents'
-      );
+      var form = button.closest('form');
 
       if (!isTargetForm(form)) {
         return;
       }
 
+      /*
+       * Allow Squarespace validation to happen first.
+       */
       setTimeout(function () {
+        if (form.checkValidity && !form.checkValidity()) {
+          console.log(
+            'Squarespace GTM: browser validation failed.'
+          );
+          return;
+        }
+
         pushSubmission(form);
-      }, 0);
+      }, 100);
     },
     true
   );
+
+  console.log(
+    'Squarespace GTM: contact form listener installed.'
+  );
+
 })();
 </script>
